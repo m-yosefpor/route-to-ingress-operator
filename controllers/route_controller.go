@@ -123,6 +123,7 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 				IngressRuleValue: netv1.IngressRuleValue{
 					HTTP: &netv1.HTTPIngressRuleValue{
 						Paths: []netv1.HTTPIngressPath{{
+							Path:     "/",
 							PathType: &pathType,
 							Backend: netv1.IngressBackend{
 								Service: &netv1.IngressServiceBackend{
