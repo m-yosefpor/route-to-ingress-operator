@@ -5,9 +5,9 @@ A controller to create corresponding `ingress.networking.k8s.io/v1` resources fo
 
 ## TODO
 
-[x] int port
-[x] string port
-[x] path
-[ ] nil port
-[ ] weight
-[ ] termination
+- [x] int port
+- [x] string port
+- [x] path
+- [ ] nil port
+- [ ] weight
+- [ ] termination
