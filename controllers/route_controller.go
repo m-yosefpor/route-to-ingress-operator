@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	routev1 "github.com/openshift/api/route/v1"
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -74,7 +76,11 @@ func (r *RouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	err = r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new ingress
-		ing := r.ingressForRoute(route)
+		ing, err := r.ingressForRoute(route)
+		if err != nil {
+			log.Error(err, "Error converting route to ing")
+			return ctrl.Result{}, nil
+		}
 		log.Info("Creating a new ingress", "Ingress.Namespace", ing.Namespace, "Ingress.Name", ing.Name)
 		err = r.Create(ctx, ing)
 		if err != nil {
@@ -91,7 +97,19 @@ func (r *RouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *RouteReconciler) ingressForRoute(m *routev1.Route) *netv1.Ingress {
+func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, error) {
+	if m.Spec.Port == nil {
+		return nil, fmt.Errorf("nil port")
+	}
+	var number int32
+	switch m.Spec.Port.TargetPort.Type {
+	case intstr.String:
+		number = m.Spec.Port.TargetPort.IntVal
+	case intstr.Int:
+		return nil, fmt.Errorf("string port")
+	default:
+		return nil, fmt.Errorf("unknown targetport")
+	}
 	ing := &netv1.Ingress{
 		ObjectMeta: m.ObjectMeta,
 		Spec: netv1.IngressSpec{
@@ -104,7 +122,7 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) *netv1.Ingress {
 								Service: &netv1.IngressServiceBackend{
 									Name: m.Spec.To.Name,
 									Port: netv1.ServiceBackendPort{
-										Number: m.Spec.Port.TargetPort.IntVal,
+										Number: number,
 									},
 								},
 							},
@@ -116,7 +134,7 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) *netv1.Ingress {
 	}
 	// Set Route instance as the owner and controller
 	ctrl.SetControllerReference(m, ing, r.Scheme)
-	return ing
+	return ing, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
