@@ -101,6 +101,7 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 	if m.Spec.Port == nil {
 		return nil, fmt.Errorf("nil port")
 	}
+	var pathType netv1.PathType = "Exact"
 	var number int32
 	switch m.Spec.Port.TargetPort.Type {
 	case intstr.String:
@@ -118,6 +119,7 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 				IngressRuleValue: netv1.IngressRuleValue{
 					HTTP: &netv1.HTTPIngressRuleValue{
 						Paths: []netv1.HTTPIngressPath{{
+							PathType: &pathType,
 							Backend: netv1.IngressBackend{
 								Service: &netv1.IngressServiceBackend{
 									Name: m.Spec.To.Name,
