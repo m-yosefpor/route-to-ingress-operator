@@ -7,7 +7,7 @@ A controller to create corresponding `ingress.networking.k8s.io/v1` resources fo
 
 [x] int port
 [x] string port
+[x] path
 [ ] nil port
-[ ] path
 [ ] weight
 [ ] termination

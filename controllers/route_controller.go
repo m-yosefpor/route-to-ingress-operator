@@ -24,6 +24,7 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -116,14 +117,19 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 		return nil, fmt.Errorf("unknown targetport")
 	}
 	ing := &netv1.Ingress{
-		ObjectMeta: m.ObjectMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.Name,
+			Namespace: m.Namespace,
+			Labels:    m.Labels,
+		},
+
 		Spec: netv1.IngressSpec{
 			Rules: []netv1.IngressRule{{
 				Host: m.Spec.Host,
 				IngressRuleValue: netv1.IngressRuleValue{
 					HTTP: &netv1.HTTPIngressRuleValue{
 						Paths: []netv1.HTTPIngressPath{{
-							Path:     "/",
+							Path:     m.Spec.Path,
 							PathType: &pathType,
 							Backend: netv1.IngressBackend{
 								Service: &netv1.IngressServiceBackend{
