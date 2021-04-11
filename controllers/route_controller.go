@@ -20,7 +20,11 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	routev1 "github.com/openshift/api/route/v1"
+	netv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -32,9 +36,10 @@ type RouteReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch
 //+kubebuilder:rbac:groups=route.openshift.io,resources=routes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=route.openshift.io,resources=routes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -46,17 +51,78 @@ type RouteReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.2/pkg/reconcile
 func (r *RouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = r.Log.WithValues("route", req.NamespacedName)
+	log := r.Log.WithValues("route", req.NamespacedName)
 
-	// your logic here
+	// Lookup the route instance for this reconcile request
+	route := &routev1.Route{}
+	err := r.Get(ctx, req.NamespacedName, route)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			// Return and don't requeue
+			log.Info("Resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		log.Error(err, "Failed to get Routes")
+		return ctrl.Result{}, err
+	}
+
+	// Check if the ingress already exists, if not create a new one
+	found := &netv1.Ingress{}
+	err = r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		// Define a new ingress
+		ing := r.ingressForRoute(route)
+		log.Info("Creating a new ingress", "Ingress.Namespace", ing.Namespace, "Ingress.Name", ing.Name)
+		err = r.Create(ctx, ing)
+		if err != nil {
+			log.Error(err, "Failed to create new ingress", "Ingress.Namespace", ing.Namespace, "Ingress.Name", ing.Name)
+			return ctrl.Result{}, err
+		}
+		// Deployment created successfully - return and requeue
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		log.Error(err, "Failed to get Ingress")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *RouteReconciler) ingressForRoute(m *routev1.Route) *netv1.Ingress {
+	ing := &netv1.Ingress{
+		ObjectMeta: m.ObjectMeta,
+		Spec: netv1.IngressSpec{
+			Rules: []netv1.IngressRule{{
+				Host: m.Spec.Host,
+				IngressRuleValue: netv1.IngressRuleValue{
+					HTTP: &netv1.HTTPIngressRuleValue{
+						Paths: []netv1.HTTPIngressPath{{
+							Backend: netv1.IngressBackend{
+								Service: &netv1.IngressServiceBackend{
+									Name: m.Spec.To.Name,
+									Port: netv1.ServiceBackendPort{
+										Number: m.Spec.Port.TargetPort.IntVal,
+									},
+								},
+							},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	// Set Route instance as the owner and controller
+	ctrl.SetControllerReference(m, ing, r.Scheme)
+	return ing
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		// Uncomment the following line adding a pointer to an instance of the controlled resource as an argument
-		// For().
+		For(&routev1.Route{}).
+		Owns(&netv1.Ingress{}).
 		Complete(r)
 }
