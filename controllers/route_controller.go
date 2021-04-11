@@ -72,6 +72,13 @@ func (r *RouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
+	for _, ref := range route.OwnerReferences {
+		if ref.Kind == "Ingress" {
+			log.Info("Ignoring route as it is owned by ingress", "Ingress.Namespace", route.Namespace, "Ingress.Name", route.Name)
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Check if the ingress already exists, if not create a new one
 	found := &netv1.Ingress{}
 	err = r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, found)
@@ -116,6 +123,13 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 	default:
 		return nil, fmt.Errorf("unknown targetport")
 	}
+
+	var path string
+	if m.Spec.Path == "" {
+		path = "/"
+	} else {
+		path = m.Spec.Path
+	}
 	ing := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Name,
@@ -129,7 +143,7 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 				IngressRuleValue: netv1.IngressRuleValue{
 					HTTP: &netv1.HTTPIngressRuleValue{
 						Paths: []netv1.HTTPIngressPath{{
-							Path:     m.Spec.Path,
+							Path:     path,
 							PathType: &pathType,
 							Backend: netv1.IngressBackend{
 								Service: &netv1.IngressServiceBackend{
