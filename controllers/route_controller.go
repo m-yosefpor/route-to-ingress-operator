@@ -102,12 +102,16 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 		return nil, fmt.Errorf("nil port")
 	}
 	var pathType netv1.PathType = "Exact"
-	var number int32
+	var port netv1.ServiceBackendPort
 	switch m.Spec.Port.TargetPort.Type {
 	case intstr.String:
-		number = m.Spec.Port.TargetPort.IntVal
+		port = netv1.ServiceBackendPort{
+			Name: m.Spec.Port.TargetPort.StrVal,
+		}
 	case intstr.Int:
-		return nil, fmt.Errorf("string port")
+		port = netv1.ServiceBackendPort{
+			Number: m.Spec.Port.TargetPort.IntVal,
+		}
 	default:
 		return nil, fmt.Errorf("unknown targetport")
 	}
@@ -123,9 +127,7 @@ func (r *RouteReconciler) ingressForRoute(m *routev1.Route) (*netv1.Ingress, err
 							Backend: netv1.IngressBackend{
 								Service: &netv1.IngressServiceBackend{
 									Name: m.Spec.To.Name,
-									Port: netv1.ServiceBackendPort{
-										Number: number,
-									},
+									Port: port,
 								},
 							},
 						}},
