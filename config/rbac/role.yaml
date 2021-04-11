@@ -7,9 +7,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - route.openshift.io
+  - networking.k8s.io
   resources:
-  - routes
+  - ingresses
   verbs:
   - create
   - delete
@@ -17,6 +17,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - route.openshift.io
+  resources:
+  - routes
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - route.openshift.io
